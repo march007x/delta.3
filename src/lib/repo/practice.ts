@@ -1,6 +1,9 @@
 import { chapters, courses, topics } from "@/content";
 import { renderRich } from "@/lib/math/render";
-import { SECTION_LABEL, type Lesson } from "@/content/schema";
+import {
+  SECTION_LABEL,
+  type Lesson,
+} from "@/content/schema";
 import { shuffleWithSeed } from "@/lib/quiz";
 import { getPublishedLessons } from "./content";
 
@@ -9,31 +12,58 @@ export interface PracticeChoice {
   correct: boolean;
 }
 
-interface QuestionBase {
+interface PracticeQuestionBase {
   id: string;
 
-  /** ขั้นที่โจทย์ข้อนี้มาจาก — บอกระดับความยากคร่าว ๆ ให้ผู้เรียนรู้ตัว */
+  /**
+   * ขั้นที่โจทย์ข้อนี้มาจาก
+   * เช่น ฝึกด้วยตัวเอง / โจทย์ท้าทาย
+   */
   origin: string;
 
   promptHtml: string;
+
   explainHtml: string;
+
+  /**
+   * คำใบ้ทั้งหมด
+   */
   hintsHtml: string[];
 }
 
-export interface ChoiceQuestion extends QuestionBase {
+export interface ChoiceQuestion extends PracticeQuestionBase {
   kind: "choice";
+
   choices: PracticeChoice[];
 }
 
-export interface NumericQuestion extends QuestionBase {
+export interface NumericQuestion extends PracticeQuestionBase {
   kind: "numeric";
+
+  /**
+   * คำตอบตัวเลขจริง
+   */
   answer: number;
+
+  /**
+   * ค่าคลาดเคลื่อนที่ยอมรับได้
+   */
   tolerance?: number;
+
+  /**
+   * คำตอบสำหรับแสดงผลแบบ rich text / LaTeX
+   */
   exactHtml?: string;
+
+  /**
+   * หน่วย เช่น m, s, N, Hz
+   */
   unit?: string;
 }
 
-export type PracticeQuestion = ChoiceQuestion | NumericQuestion;
+export type PracticeQuestion =
+  | ChoiceQuestion
+  | NumericQuestion;
 
 export interface PracticeSet {
   slug: string;
@@ -43,7 +73,9 @@ export interface PracticeSet {
 
 /**
  * ขั้นที่ถือเป็น "โจทย์ฝึก" จริง ๆ
- * ขั้นอื่นที่มีควิซใช้เพื่อทำความเข้าใจระหว่างอ่าน
+ *
+ * ขั้นอื่นที่มีควิซ เช่น example หรือ definition
+ * ไม่ถูกดึงเข้าชุดฝึกหลัก
  */
 const PRACTICE_SECTIONS = new Set([
   "guided",
@@ -52,82 +84,131 @@ const PRACTICE_SECTIONS = new Set([
 ]);
 
 /**
- * ตรวจว่า block นี้เป็นโจทย์ที่สามารถนำมาใช้ฝึกได้หรือไม่
+ * ดึงคำใบ้จาก Quiz
+ *
+ * รองรับข้อมูลเก่า:
+ *   hint: string
+ *
+ * และข้อมูลใหม่:
+ *   hints: string[]
  */
-export function isQuestionBlock(kind: string): boolean {
-  return kind === "quiz" || kind === "numeric";
+function getQuizHints(
+  block: Extract<
+    import("@/content/schema").Block,
+    { kind: "quiz" }
+  >,
+): string[] {
+  if (block.hints && block.hints.length > 0) {
+    return block.hints.map((hint) => renderRich(hint));
+  }
+
+  if (block.hint) {
+    return [renderRich(block.hint)];
+  }
+
+  return [];
+}
+
+/**
+ * ดึงคำใบ้จาก Numeric
+ */
+function getNumericHints(
+  block: Extract<
+    import("@/content/schema").Block,
+    { kind: "numeric" }
+  >,
+): string[] {
+  if (!block.hints || block.hints.length === 0) {
+    return [];
+  }
+
+  return block.hints.map((hint) => renderRich(hint));
 }
 
 /**
  * ดึงชุดโจทย์ของบทหนึ่งออกมาเป็น HTML ที่เรนเดอร์เสร็จแล้ว
  *
+ * รองรับ:
+ * - Multiple choice
+ * - Numeric
+ *
  * เรนเดอร์ตอน build ทั้งหมด เพราะ KaTeX หนักเกินกว่าจะส่งไปทำงาน
- * ในเบราว์เซอร์ และทำให้หน้าโหลดครั้งแรกไม่ต้องรอ JavaScript
- * ก่อนจึงจะเห็นโจทย์
+ * ในเบราว์เซอร์ และทำให้หน้าโหลดครั้งแรกเร็วขึ้น
  */
-export function getPracticeSet(lesson: Lesson): PracticeSet {
+export function getPracticeSet(
+  lesson: Lesson,
+): PracticeSet {
   const questions: PracticeQuestion[] = [];
 
   for (const section of lesson.sections) {
-    if (!PRACTICE_SECTIONS.has(section.type)) continue;
+    if (!PRACTICE_SECTIONS.has(section.type)) {
+      continue;
+    }
 
-    section.blocks.forEach((b, i) => {
+    section.blocks.forEach((block, i) => {
       const id = `${lesson.slug}:${section.id}:${i}`;
-      const origin = SECTION_LABEL[section.type];
 
       /**
        * Multiple choice
        */
-      if (b.kind === "quiz") {
+      if (block.kind === "quiz") {
         questions.push({
           kind: "choice",
           id,
-          origin,
+          origin: SECTION_LABEL[section.type],
 
-          promptHtml: renderRich(b.prompt),
+          promptHtml: renderRich(block.prompt),
 
-          choices: shuffleWithSeed(b.choices, id).map((c) => ({
-            html: renderRich(c.text),
-            correct: Boolean(c.correct),
+          choices: shuffleWithSeed(
+            block.choices,
+            id,
+          ).map((choice) => ({
+            html: renderRich(choice.text),
+            correct: Boolean(choice.correct),
           })),
 
-          explainHtml: renderRich(b.explain),
+          explainHtml: renderRich(block.explain),
 
-          hintsHtml: (
-            b.hints ??
-            (b.hint ? [b.hint] : [])
-          ).map(renderRich),
+          hintsHtml: getQuizHints(block),
         });
+
+        return;
       }
 
       /**
-       * Numeric / กรอกคำตอบตัวเลข
+       * Numeric question
        */
-      if (b.kind === "numeric") {
+      if (block.kind === "numeric") {
         questions.push({
           kind: "numeric",
           id,
-          origin,
+          origin: SECTION_LABEL[section.type],
 
-          promptHtml: renderRich(b.prompt),
+          promptHtml: renderRich(block.prompt),
 
-          answer: b.answer,
+          answer: block.answer,
 
-          ...(b.tolerance !== undefined
-            ? { tolerance: b.tolerance }
+          ...(block.tolerance !== undefined
+            ? {
+                tolerance: block.tolerance,
+              }
             : {}),
 
-          ...(b.exact
-            ? { exactHtml: renderRich(b.exact) }
+          ...(block.exact
+            ? {
+                exactHtml: renderRich(block.exact),
+              }
             : {}),
 
-          ...(b.unit
-            ? { unit: b.unit }
+          ...(block.unit
+            ? {
+                unit: block.unit,
+              }
             : {}),
 
-          explainHtml: renderRich(b.explain),
+          explainHtml: renderRich(block.explain),
 
-          hintsHtml: b.hints.map(renderRich),
+          hintsHtml: getNumericHints(block),
         });
       }
     });
@@ -140,37 +221,48 @@ export function getPracticeSet(lesson: Lesson): PracticeSet {
   };
 }
 
-/**
- * ข้อมูลสรุปของชุดฝึกแต่ละบท
- */
 export interface PracticeSummary {
   slug: string;
   title: string;
   course: string;
   chapter: string;
 
-  /** จำนวนโจทย์ทั้งหมด */
+  /**
+   * จำนวนโจทย์ทั้งหมด
+   */
   count: number;
 
-  /** จำนวนโจทย์ที่ต้องกรอกคำตอบตัวเลข */
+  /**
+   * จำนวนโจทย์ตัวเลข
+   */
   numericCount: number;
 }
 
 /**
  * รายการชุดฝึกทั้งหมดสำหรับหน้ารวม
+ *
  * ไม่มีเนื้อโจทย์ จึงเบามาก
  */
 export function getPracticeIndex(): PracticeSummary[] {
   const chapterOf = new Map(
-    chapters.map((c) => [c.id, c]),
+    chapters.map((chapter) => [
+      chapter.id,
+      chapter,
+    ]),
   );
 
   const courseOf = new Map(
-    courses.map((c) => [c.id, c]),
+    courses.map((course) => [
+      course.id,
+      course,
+    ]),
   );
 
   const topicOf = new Map(
-    topics.map((t) => [t.id, t]),
+    topics.map((topic) => [
+      topic.id,
+      topic,
+    ]),
   );
 
   return getPublishedLessons()
@@ -185,38 +277,42 @@ export function getPracticeIndex(): PracticeSummary[] {
         ? courseOf.get(chapter.courseId)
         : undefined;
 
-      /**
-       * ดึงเฉพาะโจทย์จาก section ที่กำหนด
-       */
-      const blocks = lesson.sections
-        .filter((s) => PRACTICE_SECTIONS.has(s.type))
-        .flatMap((s) => s.blocks)
-        .filter(
-          (b) =>
-            b.kind === "quiz" ||
-            b.kind === "numeric",
-        );
+      let count = 0;
+      let numericCount = 0;
+
+      for (const section of lesson.sections) {
+        if (
+          !PRACTICE_SECTIONS.has(
+            section.type,
+          )
+        ) {
+          continue;
+        }
+
+        for (const block of section.blocks) {
+          if (
+            block.kind === "quiz" ||
+            block.kind === "numeric"
+          ) {
+            count++;
+          }
+
+          if (block.kind === "numeric") {
+            numericCount++;
+          }
+        }
+      }
 
       return {
         slug: lesson.slug,
         title: lesson.title,
-
-        course:
-          course?.title ??
-          "ไม่ทราบหลักสูตร",
-
-        chapter:
-          chapter?.title ??
-          "ไม่ทราบบท",
-
-        /** จำนวนโจทย์ทั้งหมด */
-        count: blocks.length,
-
-        /** จำนวนโจทย์ตัวเลข */
-        numericCount: blocks.filter(
-          (b) => b.kind === "numeric",
-        ).length,
+        course: course?.title ?? "",
+        chapter: chapter?.title ?? "",
+        count,
+        numericCount,
       };
     })
-    .filter((s) => s.count > 0);
+    .filter(
+      (summary) => summary.count > 0,
+    );
 }
