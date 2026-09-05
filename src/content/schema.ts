@@ -42,31 +42,52 @@ export const SECTION_LABEL: Record<SectionType, string> = {
   connection: "เชื่อมกับเรื่องอื่น",
 };
 
-const paragraph = z.object({ kind: z.literal("paragraph"), text: z.string() });
-const math = z.object({ kind: z.literal("math"), latex: z.string(), note: z.string().optional() });
+const paragraph = z.object({
+  kind: z.literal("paragraph"),
+  text: z.string(),
+});
+
+const math = z.object({
+  kind: z.literal("math"),
+  latex: z.string(),
+  note: z.string().optional(),
+});
+
 const list = z.object({
   kind: z.literal("list"),
   ordered: z.boolean().optional(),
   items: z.array(z.string()),
 });
+
 const callout = z.object({
   kind: z.literal("callout"),
   tone: z.enum(["note", "tip", "warn", "mistake", "rule"]),
   title: z.string().optional(),
   text: z.string(),
 });
+
 const viz = z.object({
   kind: z.literal("viz"),
   componentKey: z.string(),
   config: z.record(z.unknown()).optional(),
 });
+
 const worked = z.object({
   kind: z.literal("worked"),
   prompt: z.string(),
-  steps: z.array(z.object({ text: z.string(), latex: z.string().optional() })),
+  steps: z.array(
+    z.object({
+      text: z.string(),
+      latex: z.string().optional(),
+    }),
+  ),
   answer: z.string(),
 });
-/** ตารางสำหรับสรุปสมบัติ ค่าที่ต้องจำ หรือเปรียบเทียบ — หัวใจของความรู้สึก "เป็นหนังสือ" */
+
+/**
+ * ตารางสำหรับสรุปสมบัติ ค่าที่ต้องจำ หรือเปรียบเทียบ
+ * — หัวใจของความรู้สึก "เป็นหนังสือ"
+ */
 const table = z.object({
   kind: z.literal("table"),
   caption: z.string().optional(),
@@ -74,12 +95,39 @@ const table = z.object({
   rows: z.array(z.array(z.string())),
 });
 
+/**
+ * ควิซแบบเลือกคำตอบ
+ */
 const quiz = z.object({
   kind: z.literal("quiz"),
   prompt: z.string(),
-  choices: z.array(z.object({ text: z.string(), correct: z.boolean().optional() })),
+  choices: z.array(
+    z.object({
+      text: z.string(),
+      correct: z.boolean().optional(),
+    }),
+  ),
   explain: z.string(),
   hint: z.string().optional(),
+  hints: z.array(z.string()).optional(),
+});
+
+/**
+ * โจทย์แบบกรอกคำตอบตัวเลข
+ *
+ * answer = คำตอบที่ถูกต้อง
+ * tolerance = ค่าความคลาดเคลื่อนที่ยอมรับได้ (ถ้ามี)
+ * exact = คำตอบในรูปแบบที่ต้องการแสดง เช่น เศษส่วน
+ * hints = แนวทางช่วยคิดทีละขั้น
+ */
+const numeric = z.object({
+  kind: z.literal("numeric"),
+  prompt: z.string(),
+  answer: z.number(),
+  explain: z.string(),
+  hints: z.array(z.string()),
+  tolerance: z.number().nonnegative().optional(),
+  exact: z.string().optional(),
 });
 
 export const blockSchema = z.discriminatedUnion("kind", [
@@ -90,9 +138,15 @@ export const blockSchema = z.discriminatedUnion("kind", [
   viz,
   worked,
   quiz,
+  numeric,
   table,
 ]);
+
 export type Block = z.infer<typeof blockSchema>;
+
+export type NumericBlock = Extract<Block, { kind: "numeric" }>;
+
+export type QuizBlock = Extract<Block, { kind: "quiz" }>;
 
 export const lessonSectionSchema = z.object({
   id: z.string(),
@@ -100,6 +154,7 @@ export const lessonSectionSchema = z.object({
   title: z.string().optional(),
   blocks: z.array(blockSchema),
 });
+
 export type LessonSection = z.infer<typeof lessonSectionSchema>;
 
 export const lessonSchema = z.object({
@@ -113,6 +168,7 @@ export const lessonSchema = z.object({
   status: z.enum(["draft", "published"]),
   sections: z.array(lessonSectionSchema),
 });
+
 export type Lesson = z.infer<typeof lessonSchema>;
 
 export const topicSchema = z.object({
@@ -122,9 +178,14 @@ export const topicSchema = z.object({
   title: z.string(),
   summary: z.string(),
   order: z.number().int(),
-  /** พื้นฐานที่ต้องแม่นก่อน — ใช้สร้างกราฟลำดับการเรียนใน Phase ถัดไป */
+
+  /**
+   * พื้นฐานที่ต้องแม่นก่อน
+   * — ใช้สร้างกราฟลำดับการเรียนใน Phase ถัดไป
+   */
   prerequisites: z.array(z.string()),
 });
+
 export type Topic = z.infer<typeof topicSchema>;
 
 export const chapterSchema = z.object({
@@ -133,16 +194,25 @@ export const chapterSchema = z.object({
   title: z.string(),
   order: z.number().int(),
 });
+
 export type Chapter = z.infer<typeof chapterSchema>;
 
 export const courseSchema = z.object({
   id: z.string(),
   slug: z.string(),
   title: z.string(),
-  level: z.enum(["foundation", "m4", "m5", "m6", "advanced", "university"]),
+  level: z.enum([
+    "foundation",
+    "m4",
+    "m5",
+    "m6",
+    "advanced",
+    "university",
+  ]),
   description: z.string(),
   order: z.number().int(),
 });
+
 export type Course = z.infer<typeof courseSchema>;
 
 export const LEVEL_LABEL: Record<Course["level"], string> = {
