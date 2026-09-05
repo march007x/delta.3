@@ -9,15 +9,31 @@ export interface PracticeChoice {
   correct: boolean;
 }
 
-export interface PracticeQuestion {
+interface QuestionBase {
   id: string;
+
   /** ขั้นที่โจทย์ข้อนี้มาจาก — บอกระดับความยากคร่าว ๆ ให้ผู้เรียนรู้ตัว */
   origin: string;
+
   promptHtml: string;
-  choices: PracticeChoice[];
   explainHtml: string;
-  hintHtml?: string;
+  hintsHtml: string[];
 }
+
+export interface ChoiceQuestion extends QuestionBase {
+  kind: "choice";
+  choices: PracticeChoice[];
+}
+
+export interface NumericQuestion extends QuestionBase {
+  kind: "numeric";
+  answer: number;
+  tolerance?: number;
+  exactHtml?: string;
+  unit?: string;
+}
+
+export type PracticeQuestion = ChoiceQuestion | NumericQuestion;
 
 export interface PracticeSet {
   slug: string;
@@ -25,68 +41,181 @@ export interface PracticeSet {
   questions: PracticeQuestion[];
 }
 
-/** ขั้นที่ถือเป็น "โจทย์ฝึก" จริง ๆ — ขั้นอื่นที่มีควิซใช้เพื่อทำความเข้าใจระหว่างอ่าน */
-const PRACTICE_SECTIONS = new Set(["guided", "practice", "challenge"]);
+/**
+ * ขั้นที่ถือเป็น "โจทย์ฝึก" จริง ๆ
+ * ขั้นอื่นที่มีควิซใช้เพื่อทำความเข้าใจระหว่างอ่าน
+ */
+const PRACTICE_SECTIONS = new Set([
+  "guided",
+  "practice",
+  "challenge",
+]);
+
+/**
+ * ตรวจว่า block นี้เป็นโจทย์ที่สามารถนำมาใช้ฝึกได้หรือไม่
+ */
+export function isQuestionBlock(kind: string): boolean {
+  return kind === "quiz" || kind === "numeric";
+}
 
 /**
  * ดึงชุดโจทย์ของบทหนึ่งออกมาเป็น HTML ที่เรนเดอร์เสร็จแล้ว
  *
- * เรนเดอร์ตอน build ทั้งหมด เพราะ KaTeX หนักเกินกว่าจะส่งไปทำงานในเบราว์เซอร์
- * และทำให้หน้าโหลดครั้งแรกไม่ต้องรอ JavaScript ก่อนจึงจะเห็นโจทย์
+ * เรนเดอร์ตอน build ทั้งหมด เพราะ KaTeX หนักเกินกว่าจะส่งไปทำงาน
+ * ในเบราว์เซอร์ และทำให้หน้าโหลดครั้งแรกไม่ต้องรอ JavaScript
+ * ก่อนจึงจะเห็นโจทย์
  */
 export function getPracticeSet(lesson: Lesson): PracticeSet {
   const questions: PracticeQuestion[] = [];
 
   for (const section of lesson.sections) {
     if (!PRACTICE_SECTIONS.has(section.type)) continue;
+
     section.blocks.forEach((b, i) => {
-      if (b.kind !== "quiz") return;
       const id = `${lesson.slug}:${section.id}:${i}`;
-      questions.push({
-        id,
-        origin: SECTION_LABEL[section.type],
-        promptHtml: renderRich(b.prompt),
-        choices: shuffleWithSeed(b.choices, id).map((c) => ({
-          html: renderRich(c.text),
-          correct: Boolean(c.correct),
-        })),
-        explainHtml: renderRich(b.explain),
-        hintHtml: b.hint ? renderRich(b.hint) : undefined,
-      });
+      const origin = SECTION_LABEL[section.type];
+
+      /**
+       * Multiple choice
+       */
+      if (b.kind === "quiz") {
+        questions.push({
+          kind: "choice",
+          id,
+          origin,
+
+          promptHtml: renderRich(b.prompt),
+
+          choices: shuffleWithSeed(b.choices, id).map((c) => ({
+            html: renderRich(c.text),
+            correct: Boolean(c.correct),
+          })),
+
+          explainHtml: renderRich(b.explain),
+
+          hintsHtml: (
+            b.hints ??
+            (b.hint ? [b.hint] : [])
+          ).map(renderRich),
+        });
+      }
+
+      /**
+       * Numeric / กรอกคำตอบตัวเลข
+       */
+      if (b.kind === "numeric") {
+        questions.push({
+          kind: "numeric",
+          id,
+          origin,
+
+          promptHtml: renderRich(b.prompt),
+
+          answer: b.answer,
+
+          ...(b.tolerance !== undefined
+            ? { tolerance: b.tolerance }
+            : {}),
+
+          ...(b.exact
+            ? { exactHtml: renderRich(b.exact) }
+            : {}),
+
+          ...(b.unit
+            ? { unit: b.unit }
+            : {}),
+
+          explainHtml: renderRich(b.explain),
+
+          hintsHtml: b.hints.map(renderRich),
+        });
+      }
     });
   }
 
-  return { slug: lesson.slug, title: lesson.title, questions };
+  return {
+    slug: lesson.slug,
+    title: lesson.title,
+    questions,
+  };
 }
 
+/**
+ * ข้อมูลสรุปของชุดฝึกแต่ละบท
+ */
 export interface PracticeSummary {
   slug: string;
   title: string;
   course: string;
   chapter: string;
+
+  /** จำนวนโจทย์ทั้งหมด */
   count: number;
+
+  /** จำนวนโจทย์ที่ต้องกรอกคำตอบตัวเลข */
+  numericCount: number;
 }
 
-/** รายการชุดฝึกทั้งหมดสำหรับหน้ารวม — ไม่มีเนื้อโจทย์ จึงเบามาก */
+/**
+ * รายการชุดฝึกทั้งหมดสำหรับหน้ารวม
+ * ไม่มีเนื้อโจทย์ จึงเบามาก
+ */
 export function getPracticeIndex(): PracticeSummary[] {
-  const chapterOf = new Map(chapters.map((c) => [c.id, c]));
-  const courseOf = new Map(courses.map((c) => [c.id, c]));
-  const topicOf = new Map(topics.map((t) => [t.id, t]));
+  const chapterOf = new Map(
+    chapters.map((c) => [c.id, c]),
+  );
+
+  const courseOf = new Map(
+    courses.map((c) => [c.id, c]),
+  );
+
+  const topicOf = new Map(
+    topics.map((t) => [t.id, t]),
+  );
 
   return getPublishedLessons()
     .map((lesson) => {
       const topic = topicOf.get(lesson.topicId);
-      const chapter = topic ? chapterOf.get(topic.chapterId) : undefined;
-      const course = chapter ? courseOf.get(chapter.courseId) : undefined;
-      const count = lesson.sections
+
+      const chapter = topic
+        ? chapterOf.get(topic.chapterId)
+        : undefined;
+
+      const course = chapter
+        ? courseOf.get(chapter.courseId)
+        : undefined;
+
+      /**
+       * ดึงเฉพาะโจทย์จาก section ที่กำหนด
+       */
+      const blocks = lesson.sections
         .filter((s) => PRACTICE_SECTIONS.has(s.type))
-        .reduce((n, s) => n + s.blocks.filter((b) => b.kind === "quiz").length, 0);
+        .flatMap((s) => s.blocks)
+        .filter(
+          (b) =>
+            b.kind === "quiz" ||
+            b.kind === "numeric",
+        );
+
       return {
         slug: lesson.slug,
         title: lesson.title,
-        course: course?.title ?? "",
-        chapter: chapter?.title ?? "",
-        count,
+
+        course:
+          course?.title ??
+          "ไม่ทราบหลักสูตร",
+
+        chapter:
+          chapter?.title ??
+          "ไม่ทราบบท",
+
+        /** จำนวนโจทย์ทั้งหมด */
+        count: blocks.length,
+
+        /** จำนวนโจทย์ตัวเลข */
+        numericCount: blocks.filter(
+          (b) => b.kind === "numeric",
+        ).length,
       };
     })
     .filter((s) => s.count > 0);
