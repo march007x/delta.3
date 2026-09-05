@@ -1,0 +1,346 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Delta — Design Tokens
+   สีทุกสีในระบบต้องมาจากตัวแปรในไฟล์นี้เท่านั้น
+   ห้ามเขียนค่าสี hex ตรง ๆ ใน component (เกณฑ์ตรวจรับด่าน "UI")
+   ธีมมี 3 สถานะ: light / dark ตามระบบ / dark ที่ผู้ใช้เลือกเอง
+   ============================================================ */
+
+:root {
+  /* พื้นผิว */
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --surface-2: #edeff7;
+  --surface-3: #e4e7f2;
+
+  /* ตัวอักษร */
+  --ink: #141728;
+  --ink-2: #474d68;
+  --ink-3: #787f9c;
+
+  /* เส้น */
+  --line: #dce0ee;
+  --line-strong: #c2c8de;
+
+  /* สีหลัก */
+  --accent: #2e45c4;
+  --accent-ink: #2436a0;
+  --accent-soft: #e5e8fb;
+
+  /* สีรอง — ใช้เน้น "การเปลี่ยนแปลง" (Δ) ในภาพประกอบคณิตศาสตร์ */
+  --delta: #b8620a;
+  --delta-soft: #fbeeda;
+
+  /* สีเชิงความหมาย */
+  --ok: #0d7a5f;
+  --ok-soft: #dcf1ea;
+  --warn: #8f5b05;
+  --warn-soft: #faeeda;
+  --danger: #ae3729;
+  --danger-soft: #fae6e3;
+
+  /* สีสำหรับ canvas คณิตศาสตร์ */
+  --viz-bg: #ffffff;
+  --viz-grid: #e6e9f4;
+  --viz-grid-major: #ced4e8;
+  --viz-axis: #6b7290;
+  --viz-curve: #2e45c4;
+  --viz-delta: #b8620a;
+  --viz-point: #141728;
+  --viz-label: #545a76;
+  --viz-fill: rgba(46, 69, 196, 0.1);
+
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(20, 23, 40, 0.05), 0 8px 24px -18px rgba(20, 23, 40, 0.35);
+
+  /* หน้าต้อนรับ — ใช้สีชุดเดียวทั้งธีมสว่างและธีมมืด
+     เพราะเป็นประตูหน้าแรก ควรให้ทุกคนเห็นภาพเดียวกันไม่ว่าตั้งเครื่องมาแบบไหน */
+  --hero-bg: #101433;
+  --hero-bg-2: #171d47;
+  --hero-ink: #ffffff;
+  --hero-ink-2: #c3c9ee;
+  --hero-ink-3: #8d95c6;
+  --hero-line: #515da8;
+  --hero-cta: #b8500a;
+  --hero-cta-ink: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1020;
+    --surface: #151929;
+    --surface-2: #1c2135;
+    --surface-3: #232942;
+    --ink: #e9ebf6;
+    --ink-2: #a9b0cd;
+    --ink-3: #79819f;
+    --line: #282e4b;
+    --line-strong: #39406a;
+    --accent: #8496ff;
+    --accent-ink: #a9b6ff;
+    --accent-soft: #1c2242;
+    --delta: #e3b267;
+    --delta-soft: #31250f;
+    --ok: #4fd1ab;
+    --ok-soft: #112d26;
+    --warn: #e3b267;
+    --warn-soft: #31250f;
+    --danger: #f0897b;
+    --danger-soft: #361b17;
+    --viz-bg: #12162a;
+    --viz-grid: #222848;
+    --viz-grid-major: #333a63;
+    --viz-axis: #7c84a8;
+    --viz-curve: #8496ff;
+    --viz-delta: #e3b267;
+    --viz-point: #e9ebf6;
+    --viz-label: #99a1c0;
+    --viz-fill: rgba(132, 150, 255, 0.14);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -20px rgba(0, 0, 0, 0.9);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1020;
+  --surface: #151929;
+  --surface-2: #1c2135;
+  --surface-3: #232942;
+  --ink: #e9ebf6;
+  --ink-2: #a9b0cd;
+  --ink-3: #79819f;
+  --line: #282e4b;
+  --line-strong: #39406a;
+  --accent: #8496ff;
+  --accent-ink: #a9b6ff;
+  --accent-soft: #1c2242;
+  --delta: #e3b267;
+  --delta-soft: #31250f;
+  --ok: #4fd1ab;
+  --ok-soft: #112d26;
+  --warn: #e3b267;
+  --warn-soft: #31250f;
+  --danger: #f0897b;
+  --danger-soft: #361b17;
+  --viz-bg: #12162a;
+  --viz-grid: #222848;
+  --viz-grid-major: #333a63;
+  --viz-axis: #7c84a8;
+  --viz-curve: #8496ff;
+  --viz-delta: #e3b267;
+  --viz-point: #e9ebf6;
+  --viz-label: #99a1c0;
+  --viz-fill: rgba(132, 150, 255, 0.14);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -20px rgba(0, 0, 0, 0.9);
+}
+
+/* map token → utility ของ Tailwind (bg-surface, text-ink, border-line, ...) */
+@theme inline {
+  /* เบรกพอยต์เพิ่ม สำหรับมือถือจอแคบมาก (iPhone SE/mini) ที่ 4 เมนู + โลโก้เต็มไม่พอดี */
+  --breakpoint-xs: 26rem;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-delta: var(--delta);
+  --color-delta-soft: var(--delta-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-hero-bg: var(--hero-bg);
+  --color-hero-bg-2: var(--hero-bg-2);
+  --color-hero-ink: var(--hero-ink);
+  --color-hero-ink-2: var(--hero-ink-2);
+  --color-hero-ink-3: var(--hero-ink-3);
+  --color-hero-line: var(--hero-line);
+  --color-hero-cta: var(--hero-cta);
+  --color-hero-cta-ink: var(--hero-cta-ink);
+
+  --font-display: "Bai Jamjuree", "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", "Sarabun", "Thonburi", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", "Sarabun", "Thonburi", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, "Roboto Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* พื้นหลังเป็นสีเรียบ ไม่มีลายตาราง — ให้ตัวเนื้อหาเป็นสิ่งที่สะดุดตา ไม่ใช่พื้น */
+}
+
+/* ป้องกัน iOS/Android ขยายขนาดตัวอักษรเองตอนหมุนจอ */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* ไฮไลต์สีฟ้าตอนแตะบน Android/iOS ทำให้ปุ่มดูพัง — ปิดแล้วใช้ :focus-visible แทน */
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ความสูงเต็มจอที่ถูกต้องบนมือถือ (แถบเครื่องมือ Safari/Chrome กินพื้นที่ 100vh)
+   เรียงจากทางเลือกที่รองรับกว้างสุดไปหาที่แม่นสุด เบราว์เซอร์เก่าจะหยุดที่บรรทัดที่มันเข้าใจ */
+.screen-h {
+  min-height: 100vh;
+  min-height: 100svh;
+}
+
+/* จอเตี้ย (มือถือแนวนอน / หน้าต่างเล็ก) — บีบหน้าต้อนรับให้ปุ่มยังอยู่ในจอ
+   ขนาดตัวอักษรที่ผูกกับความกว้างอย่างเดียวจะดันปุ่มตกใต้ขอบจอเมื่อจอเตี้ยแต่กว้าง */
+@media (max-height: 520px) {
+  .hero-stack {
+    padding-top: 4.5rem;
+    padding-bottom: 1.5rem;
+  }
+  .hero-stack h1 {
+    font-size: clamp(34px, 9vh, 56px);
+  }
+  .hero-stack .hero-tagline {
+    margin-top: 0.5rem;
+    font-size: clamp(16px, 4.5vh, 22px);
+  }
+  .hero-stack .hero-lede,
+  .hero-stack .hero-eyebrow,
+  .hero-stack .hero-note {
+    display: none;
+  }
+  .hero-stack .hero-actions {
+    margin-top: 1.25rem;
+  }
+}
+
+/* บนพื้นเข้มของหน้าต้อนรับ วงโฟกัสสีน้ำเงินของธีมสว่างจะจมหายไป จึงบังคับเป็นสีขาว */
+.on-hero :focus-visible {
+  outline-color: var(--hero-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* KaTeX ให้ตัวเลขและสูตรอ่านง่ายบนพื้นทั้งสองธีม */
+.katex {
+  font-size: 1.05em;
+  color: var(--ink);
+}
+.katex-display {
+  margin: 0.9em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+
+/* แถบเลื่อนพารามิเตอร์ — ต้องแตะได้สะดวกบนมือถือ (เป้าแตะ ≥ 44px) */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+input[type="range"]::-moz-range-track {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -7.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+}
+
+/* พิมพ์เป็นชีตทบทวน — ซ่อนส่วนที่ไม่ใช่เนื้อหา และบังคับสีให้อ่านออกบนกระดาษขาว */
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #ffffff;
+    --ink: #000000;
+    --ink-2: #1a1a1a;
+    --ink-3: #444444;
+    --line: #bbbbbb;
+    --line-strong: #888888;
+  }
+  body {
+    background: #ffffff !important;
+  }
+  header[class*="sticky"],
+  footer,
+  nav[aria-label="ข้ามไปยังระดับชั้น"],
+  .no-print {
+    display: none !important;
+  }
+  a[class*="accent-ink"] {
+    display: none !important;
+  }
+  figure,
+  article,
+  table {
+    break-inside: avoid;
+  }
+  h2 {
+    break-before: page;
+  }
+  h2:first-of-type {
+    break-before: auto;
+  }
+}
