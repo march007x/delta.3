@@ -19,7 +19,6 @@ interface Answered {
   correct: boolean;
 }
 
-/** สับลำดับข้อ และสับตัวเลือกเฉพาะข้อแบบเลือกตอบ */
 function makeRound(questions: PracticeQuestion[]): PracticeQuestion[] {
   return shuffle(questions).map((q) => {
     if (q.kind === "choice") {
@@ -56,7 +55,7 @@ export function PracticeRunner({
 
   const [picked, setPicked] = useState<number | null>(null);
   const [numericInput, setNumericInput] = useState("");
-  const [answered, setAnswered] = useState(false);
+  const [numericSubmitted, setNumericSubmitted] = useState(false);
 
   const [showHint, setShowHint] = useState(false);
   const [answers, setAnswers] = useState<Answered[]>([]);
@@ -66,71 +65,62 @@ export function PracticeRunner({
   const previous = ready ? map[slug] : undefined;
   const current = order[index];
 
+  const answered =
+    picked !== null ||
+    numericSubmitted;
+
+  const currentAnswer = answers.find((a) => a.id === current?.id);
+
+  const isCorrect = currentAnswer?.correct ?? false;
+
   const score = useMemo(
     () => answers.filter((a) => a.correct).length,
     [answers],
   );
-
-  const currentCorrect = useMemo(() => {
-    if (!current || !answered) return false;
-
-    if (isChoiceQuestion(current)) {
-      return picked !== null && Boolean(current.choices[picked]?.correct);
-    }
-
-    if (isNumericQuestion(current)) {
-      const value = Number(numericInput);
-
-      if (!Number.isFinite(value)) return false;
-
-      const tolerance = current.tolerance ?? 0;
-
-      return Math.abs(value - current.answer) <= tolerance;
-    }
-
-    return false;
-  }, [current, answered, picked, numericInput]);
 
   function start() {
     setOrder(makeRound(questions));
     setIndex(0);
     setPicked(null);
     setNumericInput("");
-    setAnswered(false);
+    setNumericSubmitted(false);
     setShowHint(false);
     setAnswers([]);
     setPhase("running");
   }
 
-  function pickChoice(i: number) {
-    if (answered || !current || !isChoiceQuestion(current)) return;
+  function pickChoice(choiceIndex: number) {
+    if (!current || !isChoiceQuestion(current) || answered) return;
 
-    const correct = Boolean(current.choices[i]?.correct);
+    const correct = Boolean(current.choices[choiceIndex]?.correct);
 
-    setPicked(i);
-    setAnswered(true);
+    setPicked(choiceIndex);
 
     setAnswers((prev) => [
       ...prev,
       {
         id: current.id,
-        picked: i,
+        picked: choiceIndex,
         correct,
       },
     ]);
   }
 
   function submitNumeric() {
-    if (answered || !current || !isNumericQuestion(current)) return;
+    if (!current || !isNumericQuestion(current) || answered) return;
 
-    const value = Number(numericInput);
+    const raw = numericInput.trim();
+
+    if (!raw) return;
+
+    const value = Number(raw);
 
     if (!Number.isFinite(value)) return;
 
     const tolerance = current.tolerance ?? 0;
     const correct = Math.abs(value - current.answer) <= tolerance;
 
-    setAnswered(true);
+    setNumericSubmitted(true);
 
     setAnswers((prev) => [
       ...prev,
@@ -142,13 +132,21 @@ export function PracticeRunner({
   }
 
   function next() {
-    if (index + 1 >= order.length) {
-      const finished = answers;
+    if (!current || !answered) return;
+
+    const nextIndex = index + 1;
+
+    if (nextIndex >= order.length) {
+      const finalAnswers = answers;
+
+      const correctCount = finalAnswers.filter(
+        (a) => a.correct,
+      ).length;
 
       save(slug, {
-        correct: finished.filter((a) => a.correct).length,
+        correct: correctCount,
         total: order.length,
-        missed: finished
+        missed: finalAnswers
           .filter((a) => !a.correct)
           .map((a) => a.id),
       });
@@ -157,10 +155,10 @@ export function PracticeRunner({
       return;
     }
 
-    setIndex((i) => i + 1);
+    setIndex(nextIndex);
     setPicked(null);
     setNumericInput("");
-    setAnswered(false);
+    setNumericSubmitted(false);
     setShowHint(false);
   }
 
@@ -173,8 +171,9 @@ export function PracticeRunner({
 
         <p className="m-0 mb-4 text-[15px] leading-relaxed text-ink-2">
           โจทย์สับลำดับใหม่ทุกครั้ง · ทำทีละข้อ
-          และเฉลยขึ้นทันทีหลังตอบ
-          ผลการทำแบบฝึกจะถูกเก็บไว้ในเบราว์เซอร์ของคุณเท่านั้น
+          และเฉลยจะแสดงทันทีหลังตอบ
+          เมื่อจบชุดจะสรุปว่าพลาดข้อไหนบ้าง
+          ผลการทำแบบฝึกเก็บไว้ในเบราว์เซอร์ของคุณเท่านั้น
         </p>
 
         {previous ? (
@@ -209,10 +208,14 @@ export function PracticeRunner({
 
   if (phase === "done") {
     const missedIds = new Set(
-      answers.filter((a) => !a.correct).map((a) => a.id),
+      answers
+        .filter((a) => !a.correct)
+        .map((a) => a.id),
     );
 
-    const missed = order.filter((q) => missedIds.has(q.id));
+    const missed = order.filter((q) =>
+      missedIds.has(q.id),
+    );
 
     const pct =
       order.length > 0
@@ -228,7 +231,6 @@ export function PracticeRunner({
 
           <p className="m-0 my-1 font-display text-[32px] font-bold tracking-tight text-ink">
             {score} / {order.length}
-
             <span className="ml-2 font-mono text-[16px] font-normal text-ink-3">
               ({pct}%)
             </span>
@@ -274,54 +276,58 @@ export function PracticeRunner({
             </h2>
 
             <div className="flex flex-col gap-3">
-              {missed.map((q) => (
-                <div
-                  key={q.id}
-                  className="rounded-[10px] border border-line bg-surface p-4"
-                >
-                  <p
-                    className="m-0 mb-2 text-[15.5px] font-medium text-ink"
-                    dangerouslySetInnerHTML={{
-                      __html: q.promptHtml,
-                    }}
-                  />
+              {missed.map((q) => {
+                const isChoice = isChoiceQuestion(q);
+                const isNumeric = isNumericQuestion(q);
 
-                  <p className="m-0 mb-1.5 font-mono text-[12px] text-ink-3">
-                    คำตอบที่ถูก
-                  </p>
-
-                  {isChoiceQuestion(q) ? (
+                return (
+                  <div
+                    key={q.id}
+                    className="rounded-[10px] border border-line bg-surface p-4"
+                  >
                     <p
-                      className="m-0 mb-2.5 rounded-lg border border-ok bg-ok-soft px-3 py-1.5 text-[15px] text-ink"
+                      className="m-0 mb-2 text-[15.5px] font-medium text-ink"
                       dangerouslySetInnerHTML={{
-                        __html:
-                          q.choices.find((c) => c.correct)?.html ?? "",
+                        __html: q.promptHtml,
                       }}
                     />
-                  ) : (
-                    <p className="m-0 mb-2.5 rounded-lg border border-ok bg-ok-soft px-3 py-1.5 text-[15px] text-ink">
-                      {q.exactHtml ? (
+
+                    <p className="m-0 mb-1.5 font-mono text-[12px] text-ink-3">
+                      คำตอบที่ถูก
+                    </p>
+
+                    {isChoice ? (
+                      <p
+                        className="m-0 mb-2.5 rounded-lg border border-ok bg-ok-soft px-3 py-1.5 text-[15px] text-ink"
+                        dangerouslySetInnerHTML={{
+                          __html:
+                            q.choices.find(
+                              (c) => c.correct,
+                            )?.html ?? "",
+                        }}
+                      />
+                    ) : isNumeric ? (
+                      <p className="m-0 mb-2.5 rounded-lg border border-ok bg-ok-soft px-3 py-1.5 text-[15px] text-ink">
                         <span
                           dangerouslySetInnerHTML={{
-                            __html: q.exactHtml,
+                            __html:
+                              q.exactHtml ??
+                              String(q.answer),
                           }}
                         />
-                      ) : (
-                        q.answer
-                      )}
+                        {q.unit ? ` ${q.unit}` : ""}
+                      </p>
+                    ) : null}
 
-                      {q.unit ? ` ${q.unit}` : ""}
-                    </p>
-                  )}
-
-                  <p
-                    className="m-0 text-[14.5px] leading-relaxed text-ink-2"
-                    dangerouslySetInnerHTML={{
-                      __html: q.explainHtml,
-                    }}
-                  />
-                </div>
-              ))}
+                    <p
+                      className="m-0 text-[14.5px] leading-relaxed text-ink-2"
+                      dangerouslySetInnerHTML={{
+                        __html: q.explainHtml,
+                      }}
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : (
@@ -335,12 +341,15 @@ export function PracticeRunner({
 
   if (!current) return null;
 
+  const hints = current.hintsHtml ?? [];
+
   return (
     <div>
       <div className="mb-4">
         <div className="mb-1.5 flex items-baseline justify-between font-mono text-[12px] text-ink-3">
           <span>
-            ข้อ {index + 1} จาก {order.length} · {current.origin}
+            ข้อ {index + 1} จาก {order.length} ·{" "}
+            {current.origin}
           </span>
 
           <span>ถูกแล้ว {score}</span>
@@ -377,9 +386,10 @@ export function PracticeRunner({
 
         {isChoiceQuestion(current) ? (
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {current.choices.map((c, i) => {
+            {current.choices.map((choice, i) => {
               const chosen = picked === i;
-              const reveal = answered && c.correct;
+              const revealCorrect =
+                answered && Boolean(choice.correct);
 
               return (
                 <li key={i}>
@@ -392,15 +402,15 @@ export function PracticeRunner({
                       "flex w-full items-start gap-2.5 rounded-lg border px-3.5 py-2.5 text-left text-[15px]",
                       !answered &&
                         "border-line bg-surface-2 hover:border-accent",
-                      reveal &&
+                      revealCorrect &&
                         "border-ok bg-ok-soft",
                       answered &&
                         chosen &&
-                        !c.correct &&
+                        !choice.correct &&
                         "border-danger bg-danger-soft",
                       answered &&
                         !chosen &&
-                        !c.correct &&
+                        !choice.correct &&
                         "border-line bg-surface-2 opacity-60",
                     )}
                   >
@@ -414,7 +424,7 @@ export function PracticeRunner({
                     <span
                       className="text-ink"
                       dangerouslySetInnerHTML={{
-                        __html: c.html,
+                        __html: choice.html,
                       }}
                     />
                   </button>
@@ -422,59 +432,74 @@ export function PracticeRunner({
               );
             })}
           </ul>
-        ) : (
+        ) : isNumericQuestion(current) ? (
           <div className="flex flex-col gap-3">
-            <label className="font-mono text-[12px] text-ink-3">
-              คำตอบตัวเลข
-            </label>
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="numeric-answer"
+                className="font-mono text-[12px] text-ink-3"
+              >
+                คำตอบตัวเลข
+              </label>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="number"
-                inputMode="decimal"
-                value={numericInput}
-                disabled={answered}
-                onChange={(e) =>
-                  setNumericInput(e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    submitNumeric();
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="numeric-answer"
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  value={numericInput}
+                  disabled={answered}
+                  onChange={(event) =>
+                    setNumericInput(event.target.value)
                   }
-                }}
-                className="w-full max-w-[280px] rounded-lg border border-line bg-surface-2 px-3.5 py-2.5 text-[16px] text-ink outline-none focus:border-accent"
-                placeholder="พิมพ์คำตอบ..."
-              />
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !answered
+                    ) {
+                      submitNumeric();
+                    }
+                  }}
+                  placeholder="พิมพ์คำตอบ..."
+                  className="w-full rounded-lg border border-line bg-surface-2 px-3.5 py-2.5 text-[15px] text-ink outline-none focus:border-accent sm:max-w-sm"
+                />
+
+                {!answered ? (
+                  <button
+                    type="button"
+                    onClick={submitNumeric}
+                    disabled={!numericInput.trim()}
+                    className="rounded-lg bg-accent px-4 py-2.5 text-[15px] font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ตรวจคำตอบ
+                  </button>
+                ) : null}
+              </div>
 
               {current.unit ? (
-                <span className="font-mono text-[13px] text-ink-3">
-                  {current.unit}
-                </span>
-              ) : null}
-
-              {!answered ? (
-                <button
-                  type="button"
-                  onClick={submitNumeric}
-                  disabled={!numericInput.trim()}
-                  className="rounded-lg bg-accent px-4 py-2.5 text-[15px] font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  ตรวจคำตอบ
-                </button>
+                <p className="m-0 font-mono text-[12px] text-ink-3">
+                  หน่วย: {current.unit}
+                </p>
               ) : null}
             </div>
           </div>
-        )}
+        ) : null}
 
-        {!answered && current.hintHtml ? (
+        {!answered && hints.length > 0 ? (
           <div className="mt-3">
             {showHint ? (
-              <p
-                className="m-0 rounded-lg border-l-[3px] border-l-warn bg-warn-soft px-3.5 py-2 text-[14px] text-ink"
-                dangerouslySetInnerHTML={{
-                  __html: current.hintHtml,
-                }}
-              />
+              <div className="flex flex-col gap-2">
+                {hints.map((hint, hintIndex) => (
+                  <p
+                    key={hintIndex}
+                    className="m-0 rounded-lg border-l-[3px] border-l-warn bg-warn-soft px-3.5 py-2 text-[14px] text-ink"
+                    dangerouslySetInnerHTML={{
+                      __html: hint,
+                    }}
+                  />
+                ))}
+              </div>
             ) : (
               <button
                 type="button"
@@ -492,19 +517,26 @@ export function PracticeRunner({
             <div
               className={cx(
                 "mt-3 rounded-lg border-l-[3px] px-4 py-3",
-                currentCorrect
+                isCorrect
                   ? "border-l-ok bg-ok-soft"
                   : "border-l-danger bg-danger-soft",
               )}
             >
               <p className="m-0 mb-1 font-display text-[14px] font-semibold text-ink">
-                {currentCorrect ? "ถูกต้อง" : "ยังไม่ใช่"}
+                {isCorrect ? "ถูกต้อง" : "ยังไม่ใช่"}
               </p>
 
-              {!currentCorrect &&
+              <p
+                className="m-0 text-[14.5px] leading-relaxed text-ink-2"
+                dangerouslySetInnerHTML={{
+                  __html: current.explainHtml,
+                }}
+              />
+
+              {!isCorrect &&
               isNumericQuestion(current) ? (
-                <p className="m-0 mb-2 text-[14px] text-ink-2">
-                  คำตอบที่ถูกคือ{" "}
+                <p className="m-0 mt-2 text-[14px] text-ink-2">
+                  คำตอบที่ถูก:{" "}
                   <strong>
                     {current.exactHtml ? (
                       <span
@@ -515,17 +547,12 @@ export function PracticeRunner({
                     ) : (
                       current.answer
                     )}
-                    {current.unit ? ` ${current.unit}` : ""}
+                    {current.unit
+                      ? ` ${current.unit}`
+                      : ""}
                   </strong>
                 </p>
               ) : null}
-
-              <p
-                className="m-0 text-[14.5px] leading-relaxed text-ink-2"
-                dangerouslySetInnerHTML={{
-                  __html: current.explainHtml,
-                }}
-              />
             </div>
 
             <button
