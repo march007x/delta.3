@@ -86,7 +86,6 @@ const worked = z.object({
 
 /**
  * ตารางสำหรับสรุปสมบัติ ค่าที่ต้องจำ หรือเปรียบเทียบ
- * — หัวใจของความรู้สึก "เป็นหนังสือ"
  */
 const table = z.object({
   kind: z.literal("table"),
@@ -96,7 +95,11 @@ const table = z.object({
 });
 
 /**
- * ควิซแบบเลือกคำตอบ
+ * Multiple-choice question
+ *
+ * รองรับทั้ง:
+ * - hint เดิม 1 อัน
+ * - hints หลายอัน
  */
 const quiz = z.object({
   kind: z.literal("quiz"),
@@ -113,21 +116,22 @@ const quiz = z.object({
 });
 
 /**
- * โจทย์แบบกรอกคำตอบตัวเลข
+ * Numeric question
  *
- * answer = คำตอบที่ถูกต้อง
- * tolerance = ค่าความคลาดเคลื่อนที่ยอมรับได้ (ถ้ามี)
- * exact = คำตอบในรูปแบบที่ต้องการแสดง เช่น เศษส่วน
- * hints = แนวทางช่วยคิดทีละขั้น
+ * answer     = คำตอบตัวเลขจริง
+ * exact      = คำตอบที่ใช้แสดงแบบพิเศษ เช่น LaTeX
+ * tolerance  = ค่าคลาดเคลื่อนที่ยอมรับได้
+ * unit       = หน่วย เช่น m, s, N, Hz
  */
 const numeric = z.object({
   kind: z.literal("numeric"),
   prompt: z.string(),
   answer: z.number(),
   explain: z.string(),
-  hints: z.array(z.string()),
+  hints: z.array(z.string()).optional(),
   tolerance: z.number().nonnegative().optional(),
   exact: z.string().optional(),
+  unit: z.string().optional(),
 });
 
 export const blockSchema = z.discriminatedUnion("kind", [
@@ -181,7 +185,7 @@ export const topicSchema = z.object({
 
   /**
    * พื้นฐานที่ต้องแม่นก่อน
-   * — ใช้สร้างกราฟลำดับการเรียนใน Phase ถัดไป
+   * ใช้สร้างกราฟลำดับการเรียนใน Phase ถัดไป
    */
   prerequisites: z.array(z.string()),
 });
